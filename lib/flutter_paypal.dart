@@ -3,11 +3,15 @@ library flutter_paypal;
 import 'dart:async';
 import 'dart:core';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_paypal/src/screens/complete_payment.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-
+import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
+// Import for iOS features.
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'src/PaypalServices.dart';
 import 'src/errors/network_error.dart';
 
@@ -37,8 +41,7 @@ class UsePaypal extends StatefulWidget {
 }
 
 class UsePaypalState extends State<UsePaypal> {
-  final Completer<WebViewController> _controller =
-      Completer<WebViewController>();
+  late final WebViewController _controller;
   String checkoutUrl = '';
   String navUrl = '';
   String executeUrl = '';
@@ -75,6 +78,8 @@ class UsePaypalState extends State<UsePaypal> {
         final res =
             await services.createPaypalPayment(transactions, accessToken);
         if (res["approvalUrl"] != null) {
+          webViewController
+        ?.loadRequest(LoadRequestParams(uri: Uri.parse(res["approvalUrl"].toString())));
           setState(() {
             checkoutUrl = res["approvalUrl"].toString();
             navUrl = res["approvalUrl"].toString();
@@ -110,13 +115,15 @@ class UsePaypalState extends State<UsePaypal> {
     }
   }
 
-  JavascriptChannel _toasterJavascriptChannel(BuildContext context) {
-    return JavascriptChannel(
-        name: 'Toaster',
-        onMessageReceived: (JavascriptMessage message) {
-          widget.onError(message.message);
-        });
-  }
+  // JavascriptChannel _toasterJavascriptChannel(BuildContext context) {
+  //   return JavascriptChannel(
+  //       name: 'Toaster',
+  //       onMessageReceived: (JavascriptMessage message) {
+  //         widget.onError(message.message);
+  //       });
+  // }
+  static PlatformWebViewWidget? webViewWidget;
+  static PlatformWebViewController? webViewController;
 
   @override
   void initState() {
@@ -126,14 +133,127 @@ class UsePaypalState extends State<UsePaypal> {
       clientId: widget.clientId,
       secretKey: widget.secretKey,
     );
+    PlatformWebViewControllerCreationParams params =
+        defaultTargetPlatform == TargetPlatform.android
+            ? AndroidWebViewControllerCreationParams()
+            : WebKitWebViewControllerCreationParams(
+                limitsNavigationsToAppBoundDomains: true,
+              );
+
+   webViewController =
+        PlatformWebViewController(params);
+// ···
+
+    webViewController!
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..addJavaScriptChannel(
+        JavaScriptChannelParams(
+          name: 'Toaster',
+          onMessageReceived: (JavaScriptMessage message) {
+            widget.onError(message.message);
+          },
+        ),
+      )
+      ..setPlatformNavigationDelegate(
+        PlatformNavigationDelegate(
+          const PlatformNavigationDelegateCreationParams(),
+        )
+          ..setOnProgress((int progress) {
+            setState(() {
+              print("onProgress");
+              pageloading = false;
+            });
+          })
+          ..setOnPageStarted((String url) {
+            setState(() {
+              print("onPageStarted");
+              pageloading = true;
+              loadingError = false;
+            });
+          })
+          ..setOnPageFinished((String url) {
+            setState(() {
+              print("onPageFinished");
+              navUrl = url;
+              pageloading = false;
+            });
+          })
+          ..setOnWebResourceError((WebResourceError error) {})
+          ..setOnNavigationRequest(
+            (NavigationRequest request) async {
+              if (request.url.startsWith('https://www.youtube.com/')) {
+                return NavigationDecision.prevent;
+              }
+              if (request.url.contains(widget.returnURL)) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CompletePayment(
+                      url: request.url,
+                      services: services,
+                      executeUrl: executeUrl,
+                      accessToken: accessToken,
+                      onSuccess: widget.onSuccess,
+                      onCancel: widget.onCancel,
+                      onError: widget.onError,
+                    ),
+                  ),
+                );
+              }
+              if (request.url.contains(widget.cancelURL)) {
+                final uri = Uri.parse(request.url);
+                await widget.onCancel(uri.queryParameters);
+                Navigator.of(context).pop();
+              }
+              return NavigationDecision.navigate;
+            },
+          )
+          ..setOnUrlChange(
+            (UrlChange change) {
+              debugPrint('url change to ${change.url}');
+            },
+          ),
+      )
+      ..setOnPlatformPermissionRequest(
+        (PlatformWebViewPermissionRequest request) {
+          debugPrint(
+            'requesting permissions for ${request.types.map((WebViewPermissionResourceType type) => type.name)}',
+          );
+          request.grant();
+        },
+      );
+    // ..loadRequest(
+    //   Uri.parse(checkoutUrl),
+    // );
+
     setState(() {
       navUrl = widget.sandboxMode
           ? 'https://api.sandbox.paypal.com'
           : 'https://www.api.paypal.com';
     });
+    // #enddocregion platform_features
     // Enable hybrid composition.
-    if (Platform.isAndroid) WebView.platform = SurfaceAndroidWebView();
+    // if (Platform.isAndroid) webViewController.platform = SurfaceAndroidWebView();
+    PlatformWebViewWidgetCreationParams webViewParams =
+        defaultTargetPlatform == TargetPlatform.android
+            ? AndroidWebViewWidgetCreationParams(
+                controller: webViewController!,
+                displayWithHybridComposition: true,
+              )
+            : PlatformWebViewWidgetCreationParams(
+                controller: webViewController!,
+              );
+    webViewWidget = PlatformWebViewWidget(webViewParams);
+    _loadWithConfig();
+
     loadPayment();
+  }
+
+  void _loadWithConfig() {
+    if (webViewController is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+    }
   }
 
   @override
@@ -230,59 +350,59 @@ class UsePaypalState extends State<UsePaypal> {
                       )
                     : Column(
                         children: [
-                          Expanded(
-                            child: WebView(
-                              initialUrl: checkoutUrl,
-                              javascriptMode: JavascriptMode.unrestricted,
-                              gestureNavigationEnabled: true,
-                              onWebViewCreated:
-                                  (WebViewController webViewController) {
-                                _controller.complete(webViewController);
-                              },
-                              javascriptChannels: <JavascriptChannel>[
-                                _toasterJavascriptChannel(context),
-                              ].toSet(),
-                              navigationDelegate:
-                                  (NavigationRequest request) async {
-                                if (request.url
-                                    .startsWith('https://www.youtube.com/')) {
-                                  return NavigationDecision.prevent;
-                                }
-                                if (request.url.contains(widget.returnURL)) {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => CompletePayment(
-                                            url: request.url,
-                                            services: services,
-                                            executeUrl: executeUrl,
-                                            accessToken: accessToken,
-                                            onSuccess: widget.onSuccess,
-                                            onCancel: widget.onCancel,
-                                            onError: widget.onError)),
-                                  );
-                                }
-                                if (request.url.contains(widget.cancelURL)) {
-                                  final uri = Uri.parse(request.url);
-                                  await widget.onCancel(uri.queryParameters);
-                                  Navigator.of(context).pop();
-                                }
-                                return NavigationDecision.navigate;
-                              },
-                              onPageStarted: (String url) {
-                                setState(() {
-                                  pageloading = true;
-                                  loadingError = false;
-                                });
-                              },
-                              onPageFinished: (String url) {
-                                setState(() {
-                                  navUrl = url;
-                                  pageloading = false;
-                                });
-                              },
-                            ),
-                          ),
+                          Expanded(child: webViewWidget!.build(context)
+                              // WebView(
+                              //   initialUrl: checkoutUrl,
+                              //   javascriptMode: JavascriptMode.unrestricted,
+                              //   gestureNavigationEnabled: true,
+                              //   onWebViewCreated:
+                              //       (WebViewController webViewController) {
+                              //     _controller.complete(webViewController);
+                              //   },
+                              //   javascriptChannels: <JavascriptChannel>[
+                              //     _toasterJavascriptChannel(context),
+                              //   ].toSet(),
+                              //   navigationDelegate:
+                              //       (NavigationRequest request) async {
+                              //     if (request.url
+                              //         .startsWith('https://www.youtube.com/')) {
+                              //       return NavigationDecision.prevent;
+                              //     }
+                              //     if (request.url.contains(widget.returnURL)) {
+                              //       Navigator.pushReplacement(
+                              //         context,
+                              //         MaterialPageRoute(
+                              //             builder: (context) => CompletePayment(
+                              //                 url: request.url,
+                              //                 services: services,
+                              //                 executeUrl: executeUrl,
+                              //                 accessToken: accessToken,
+                              //                 onSuccess: widget.onSuccess,
+                              //                 onCancel: widget.onCancel,
+                              //                 onError: widget.onError)),
+                              //       );
+                              //     }
+                              //     if (request.url.contains(widget.cancelURL)) {
+                              //       final uri = Uri.parse(request.url);
+                              //       await widget.onCancel(uri.queryParameters);
+                              //       Navigator.of(context).pop();
+                              //     }
+                              //     return NavigationDecision.navigate;
+                              //   },
+                              //   onPageStarted: (String url) {
+                              //     setState(() {
+                              //       pageloading = true;
+                              //       loadingError = false;
+                              //     });
+                              //   },
+                              //   onPageFinished: (String url) {
+                              //     setState(() {
+                              //       navUrl = url;
+                              //       pageloading = false;
+                              //     });
+                              //   },
+                              // ),
+                              ),
                         ],
                       ),
           )),

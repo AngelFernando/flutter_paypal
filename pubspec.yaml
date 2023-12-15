@@ -15,6 +15,9 @@ dependencies:
   http: ^0.13.5
   http_auth: ^1.0.1
   webview_flutter: ^4.2.2
+  webview_flutter_platform_interface: ^2.4.0
+  webview_flutter_android: ^3.12.1
+  webview_flutter_wkwebview: ^3.9.4
 
 dev_dependencies:
   flutter_test:
