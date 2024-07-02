@@ -160,24 +160,24 @@ class UsePaypalState extends State<UsePaypal> {
           const PlatformNavigationDelegateCreationParams(),
         )
           ..setOnProgress((int progress) {
-            setState(() {
-              print("onProgress");
-              pageloading = false;
-            });
+            // setState(() {
+            //   print("onProgress");
+            //   pageloading = false;
+            // });
           })
           ..setOnPageStarted((String url) {
-            setState(() {
-              print("onPageStarted");
-              pageloading = true;
-              loadingError = false;
-            });
+            // setState(() {
+            //   print("onPageStarted");
+            //   pageloading = true;
+            //   loadingError = false;
+            // });
           })
           ..setOnPageFinished((String url) {
-            setState(() {
-              print("onPageFinished");
-              navUrl = url;
-              pageloading = false;
-            });
+            // setState(() {
+            //   print("onPageFinished");
+            //   navUrl = url;
+            //   pageloading = false;
+            // });
           })
           ..setOnWebResourceError((WebResourceError error) {})
           ..setOnNavigationRequest(
