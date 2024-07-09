@@ -78,8 +78,8 @@ class UsePaypalState extends State<UsePaypal> {
         final res =
             await services.createPaypalPayment(transactions, accessToken);
         if (res["approvalUrl"] != null) {
-          webViewController
-        ?.loadRequest(LoadRequestParams(uri: Uri.parse(res["approvalUrl"].toString())));
+          webViewController?.loadRequest(
+              LoadRequestParams(uri: Uri.parse(res["approvalUrl"].toString())));
           setState(() {
             checkoutUrl = res["approvalUrl"].toString();
             navUrl = res["approvalUrl"].toString();
@@ -133,6 +133,7 @@ class UsePaypalState extends State<UsePaypal> {
       clientId: widget.clientId,
       secretKey: widget.secretKey,
     );
+
     PlatformWebViewControllerCreationParams params =
         defaultTargetPlatform == TargetPlatform.android
             ? AndroidWebViewControllerCreationParams()
@@ -140,9 +141,7 @@ class UsePaypalState extends State<UsePaypal> {
                 limitsNavigationsToAppBoundDomains: true,
               );
 
-   webViewController =
-        PlatformWebViewController(params);
-// ···
+    webViewController = PlatformWebViewController(params);
 
     webViewController!
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -160,81 +159,79 @@ class UsePaypalState extends State<UsePaypal> {
           const PlatformNavigationDelegateCreationParams(),
         )
           ..setOnProgress((int progress) {
-            // setState(() {
-            //   print("onProgress");
-            //   pageloading = false;
-            // });
+            if (navUrl.isNotEmpty) {
+              setState(() {
+                print("onProgress");
+                pageloading = false;
+              });
+            }
           })
           ..setOnPageStarted((String url) {
-            // setState(() {
-            //   print("onPageStarted");
-            //   pageloading = true;
-            //   loadingError = false;
-            // });
+            if (url.isNotEmpty) {
+              setState(() {
+                print("onPageStarted");
+                pageloading = true;
+                loadingError = false;
+              });
+            }
           })
           ..setOnPageFinished((String url) {
-            // setState(() {
-            //   print("onPageFinished");
-            //   navUrl = url;
-            //   pageloading = false;
-            // });
+            if (url.isNotEmpty) {
+              setState(() {
+                print("onPageFinished");
+                navUrl = url;
+                pageloading = false;
+              });
+            }
           })
-          ..setOnWebResourceError((WebResourceError error) {})
-          ..setOnNavigationRequest(
-            (NavigationRequest request) async {
-              if (request.url.startsWith('https://www.youtube.com/')) {
-                return NavigationDecision.prevent;
-              }
-              if (request.url.contains(widget.returnURL)) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CompletePayment(
-                      url: request.url,
-                      services: services,
-                      executeUrl: executeUrl,
-                      accessToken: accessToken,
-                      onSuccess: widget.onSuccess,
-                      onCancel: widget.onCancel,
-                      onError: widget.onError,
-                    ),
+          ..setOnWebResourceError((WebResourceError error) {
+            // Manejo de errores
+          })
+          ..setOnNavigationRequest((NavigationRequest request) async {
+            if (request.url.startsWith('https://www.youtube.com/')) {
+              return NavigationDecision.prevent;
+            }
+            if (request.url.contains(widget.returnURL)) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CompletePayment(
+                    url: request.url,
+                    services: services,
+                    executeUrl: executeUrl,
+                    accessToken: accessToken,
+                    onSuccess: widget.onSuccess,
+                    onCancel: widget.onCancel,
+                    onError: widget.onError,
                   ),
-                );
-              }
-              if (request.url.contains(widget.cancelURL)) {
-                final uri = Uri.parse(request.url);
-                await widget.onCancel(uri.queryParameters);
-                Navigator.of(context).pop();
-              }
-              return NavigationDecision.navigate;
-            },
-          )
-          ..setOnUrlChange(
-            (UrlChange change) {
-              debugPrint('url change to ${change.url}');
-            },
-          ),
+                ),
+              );
+            }
+            if (request.url.contains(widget.cancelURL)) {
+              final uri = Uri.parse(request.url);
+              await widget.onCancel(uri.queryParameters);
+              Navigator.of(context).pop();
+            }
+            return NavigationDecision.navigate;
+          })
+          ..setOnUrlChange((UrlChange change) {
+            debugPrint('THE url change to ${change.url}');
+          }),
       )
       ..setOnPlatformPermissionRequest(
-        (PlatformWebViewPermissionRequest request) {
-          debugPrint(
-            'requesting permissions for ${request.types.map((WebViewPermissionResourceType type) => type.name)}',
-          );
-          request.grant();
-        },
-      );
-    // ..loadRequest(
-    //   Uri.parse(checkoutUrl),
-    // );
+          (PlatformWebViewPermissionRequest request) {
+        debugPrint(
+          'Requesting permissions for ${request.types.map((WebViewPermissionResourceType type) => type.name)}',
+        );
+        request.grant();
+      });
 
     setState(() {
       navUrl = widget.sandboxMode
           ? 'https://api.sandbox.paypal.com'
           : 'https://www.api.paypal.com';
     });
-    // #enddocregion platform_features
-    // Enable hybrid composition.
-    // if (Platform.isAndroid) webViewController.platform = SurfaceAndroidWebView();
+
     PlatformWebViewWidgetCreationParams webViewParams =
         defaultTargetPlatform == TargetPlatform.android
             ? AndroidWebViewWidgetCreationParams(
