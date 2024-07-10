@@ -41,7 +41,7 @@ class UsePaypal extends StatefulWidget {
 }
 
 class UsePaypalState extends State<UsePaypal> {
-  late final WebViewController _controller;
+  final Completer<WebViewController> controller = Completer();
   String checkoutUrl = '';
   String navUrl = '';
   String executeUrl = '';
@@ -51,6 +51,10 @@ class UsePaypalState extends State<UsePaypal> {
   bool loadingError = false;
   late PaypalServices services;
   int pressed = 0;
+
+  static PlatformWebViewWidget? webViewWidget;
+  static PlatformWebViewController? webViewController;
+  late WebViewController _webViewController;
 
   Map getOrderParams() {
     Map<String, dynamic> temp = {
@@ -122,18 +126,14 @@ class UsePaypalState extends State<UsePaypal> {
   //         widget.onError(message.message);
   //       });
   // }
-  static PlatformWebViewWidget? webViewWidget;
-  static PlatformWebViewController? webViewController;
+  // static PlatformWebViewWidget? webViewWidget;
+  // static PlatformWebViewController? webViewController;
 
   @override
   void initState() {
     super.initState();
-    services = PaypalServices(
-      sandboxMode: widget.sandboxMode,
-      clientId: widget.clientId,
-      secretKey: widget.secretKey,
-    );
-
+    super.initState();
+    _webViewController = WebViewController();
     PlatformWebViewControllerCreationParams params =
         defaultTargetPlatform == TargetPlatform.android
             ? AndroidWebViewControllerCreationParams()
@@ -142,6 +142,21 @@ class UsePaypalState extends State<UsePaypal> {
               );
 
     webViewController = PlatformWebViewController(params);
+
+    services = PaypalServices(
+      sandboxMode: widget.sandboxMode,
+      clientId: widget.clientId,
+      secretKey: widget.secretKey,
+    );
+
+    // PlatformWebViewControllerCreationParams params =
+    //     defaultTargetPlatform == TargetPlatform.android
+    //         ? AndroidWebViewControllerCreationParams()
+    //         : WebKitWebViewControllerCreationParams(
+    //             limitsNavigationsToAppBoundDomains: true,
+    //           );
+
+    // webViewController = PlatformWebViewController(params);
 
     webViewController!
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
